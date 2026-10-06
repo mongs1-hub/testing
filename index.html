@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>J.E.T. Gains</title>
+<style>
+:root{--bg:#161a22;--card:#212835;--ink:#f1eee6;--mute:#8e98a8;--acc:#ffd23f;--ok:#58d68d;--bad:#ff6b6b;--ln:#2f394a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,sans-serif;padding:env(safe-area-inset-top) 0 calc(64px + env(safe-area-inset-bottom))}
+h1{font:800 22px system-ui;margin:0;letter-spacing:.5px}
+h2{font-size:17px;margin:18px 0 8px}
+header{padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+#net{font-size:12px;padding:3px 8px;border-radius:99px;background:var(--card)}
+main{padding:0 16px 16px;max-width:560px;margin:auto}
+.card{background:var(--card);border-radius:12px;padding:12px;margin-bottom:10px}
+.row{display:flex;gap:8px;align-items:center}
+.row>*{flex:1;min-width:0}
+input,select,textarea,button{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--ln);border-radius:8px;padding:9px}
+button{background:var(--acc);color:#161a22;font-weight:700;border:0;cursor:pointer}
+button.ghost{background:var(--bg);color:var(--ink);border:1px solid var(--ln)}
+button.x{flex:0 0 auto;background:none;color:var(--bad);padding:4px 8px}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;color:var(--mute);border-radius:0;padding:14px 0;font-size:13px}
+nav button.on{color:var(--acc);box-shadow:inset 0 3px var(--acc)}
+.sub{color:var(--mute);font-size:13px}
+.bar{height:10px;background:var(--bg);border-radius:9px;overflow:hidden;margin:6px 0}
+.bar i{display:block;height:100%;background:var(--acc)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chips button{background:var(--card);color:var(--ink);padding:6px 12px;border-radius:99px;font-weight:500}
+.chips button.on{background:var(--acc);color:#161a22;font-weight:700}
+.done{opacity:.55}
+.reply{white-space:pre-wrap}
+.pr{color:var(--acc);font-weight:700}
+</style></head><body>
+<header><h1>J.E.T. Gains</h1><span id="net"></span></header>
+<main id="app"></main>
+<nav id="nav"></nav>
+<script>
+const DAYS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const R={
+"Upper body":[["Push-ups","4x12"],["Pike push-ups","3x8"],["Dips (bench or bars)","3x10"],["Pull-ups or rows","4x6"],["Diamond push-ups","3x8"]],
+"Abs only":[["Crunches","3x20"],["Leg raises","3x12"],["Plank (sec)","3x45"],["Bicycle crunches","3x20"],["Mountain climbers","3x30"]],
+"Legs":[["Squats","4x20"],["Lunges","3x12"],["Glute bridges","3x15"],["Calf raises","4x20"],["Wall sit (sec)","3x45"]],
+"Full calisthenics":[["Push-ups","3x15"],["Squats","3x20"],["Pull-ups or rows","3x6"],["Dips","3x8"],["Plank (sec)","3x45"],["Burpees","3x10"]],
+"Rest":[]
+};
+const DEF_SCHED={0:"Rest",1:"Upper body",2:"Abs only",3:"Legs",4:"Upper body",5:"Full calisthenics",6:"Abs only"};
+const L=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}};
+const S=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+let st={tab:"today",cat:"Upper body",sched:L("sched",DEF_SCHED),logs:L("logs",[]),food:L("food",[]),goal:L("goal",{kcal:2200,prot:100}),cfg:L("cfg",{url:"https://api.groq.com/openai/v1/chat/completions",model:"llama-3.3-70b-versatile",key:""}),chat:"",busy:false};
+const key=d=>d.toISOString().slice(0,10);
+const today=()=>key(new Date());
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const best=n=>Math.max(0,...st.logs.filter(l=>l.ex===n).map(l=>l.val));
+const todayFood=()=>st.food.filter(f=>f.d===today());
+const sum=k=>todayFood().reduce((a,f)=>a+f[k],0);
+
+function logSet(ex,i){
+  const v=parseFloat(document.getElementById("v"+i).value);
+  if(!v)return;
+  const pr=v>best(ex);
+  st.logs.push({d:today(),ex,val:v});S("logs",st.logs);
+  render();if(pr&&st.logs.filter(l=>l.ex===ex).length>1)alert("New record on "+ex+": "+v+" 🔥");
+}
+function addFood(){
+  const n=document.getElementById("fn").value||"Food",k=+document.getElementById("fk").value||0,p=+document.getElementById("fp").value||0;
+  st.food.push({d:today(),n,kcal:k,prot:p});S("food",st.food);render();
+}
+function delFood(i){st.food.splice(i,1);S("food",st.food);render()}
+function setGoal(){st.goal={kcal:+document.getElementById("gk").value||2200,prot:+document.getElementById("gp").value||100};S("goal",st.goal);render()}
+function setSched(d,v){st.sched[d]=v;S("sched",st.sched)}
+function saveCfg(){st.cfg={url:document.getElementById("cu").value.trim(),model:document.getElementById("cm").value.trim(),key:document.getElementById("ck").value.trim()};S("cfg",st.cfg);alert("Saved")}
+
+function summary(){
+  const recent=st.logs.slice(-25).map(l=>`${l.d} ${l.ex}: ${l.val}`).join("\n")||"no records yet";
+  return `Weekly schedule: ${DAYS.map((n,i)=>n+"="+st.sched[i]).join(", ")}.\nToday is ${DAYS[new Date().getDay()]}.\nGoals: ${st.goal.kcal} kcal, ${st.goal.prot} g protein.\nToday so far: ${sum("kcal")} kcal, ${sum("prot")} g protein.\nRecent records (reps/seconds):\n${recent}`;
+}
+async function ask(q){
+  if(!q)return;
+  if(!navigator.onLine){st.chat="You're offline. The coach needs internet. Everything else still works.";render();return}
+  if(!st.cfg.key){st.chat="Add your API key under Settings first.";render();return}
+  st.busy=true;st.chat="Thinking...";render();
+  try{
+    const r=await fetch(st.cfg.url,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+st.cfg.key},
+      body:JSON.stringify({model:st.cfg.model,messages:[
+        {role:"system",content:"You are a concise fitness coach inside a workout app focused on home calisthenics. Use the user's data. Give practical, safe suggestions in under 150 words."},
+        {role:"user",content:summary()+"\n\nQuestion: "+q}]})});
+    const j=await r.json();
+    st.chat=j.choices?.[0]?.message?.content||("Error: "+(j.error?.message||"no reply"));
+  }catch(e){st.chat="Couldn't reach the AI. Check your connection and settings."}
+  st.busy=false;render();
+}
+
+const tabs=[["today","Today"],["plans","Plans"],["records","Records"],["food","Food"],["coach","Coach"]];
+function render(){
+  document.getElementById("net").textContent=navigator.onLine?"Online":"Offline";
+  document.getElementById("nav").innerHTML=tabs.map(([k,n])=>`<button class="${st.tab==k?"on":""}" onclick="st.tab='${k}';render()">${n}</button>`).join("");
+  const a=document.getElementById("app");
+  if(st.tab=="today"){
+    const dow=new Date().getDay(),name=st.sched[dow],list=R[name]||[];
+    const done=new Set(st.logs.filter(l=>l.d==today()).map(l=>l.ex));
+    a.innerHTML=`<h2>${DAYS[dow]}: ${esc(name)}</h2>`+(list.length?list.map(([ex,sr],i)=>`<div class="card ${done.has(ex)?"done":""}"><b>${esc(ex)}</b> <span class="sub">${sr} · best ${best(ex)||"-"}</span>
+      <div class="row" style="margin-top:8px"><input id="v${i}" type="number" inputmode="decimal" placeholder="Reps or seconds"><button onclick="logSet('${ex.replace(/'/g,"\\'")}',${i})">Log</button></div></div>`).join(""):`<div class="card">Rest day. Stretch, walk, and hit your protein.</div>`)+
+      `<h2>Food today</h2><div class="card"><div class="sub">${sum("kcal")} / ${st.goal.kcal} kcal · ${sum("prot")} / ${st.goal.prot} g protein</div></div>`;
+  }
+  if(st.tab=="plans"){
+    const cats=Object.keys(R).filter(c=>c!="Rest");
+    a.innerHTML=`<h2>Workout library</h2><div class="chips">${cats.map(c=>`<button class="${st.cat==c?"on":""}" onclick="st.cat='${c}';render()">${c}</button>`).join("")}</div>`+
+      (R[st.cat]||[]).map(([e,s])=>`<div class="card row"><span>${esc(e)}</span><span class="sub" style="text-align:right">${s}</span></div>`).join("")+
+      `<h2>Weekly schedule</h2>`+DAYS.map((d,i)=>`<div class="card row"><b>${d}</b><select onchange="setSched(${i},this.value)">${Object.keys(R).map(r=>`<option ${st.sched[i]==r?"selected":""}>${r}</option>`).join("")}</select></div>`).join("");
+  }
+  if(st.tab=="records"){
+    const names=[...new Set(st.logs.map(l=>l.ex))];
+    a.innerHTML=`<h2>Personal records</h2>`+(names.length?names.map(n=>{const h=st.logs.filter(l=>l.ex==n);return `<div class="card"><div class="row"><b>${esc(n)}</b><span class="pr" style="text-align:right">${best(n)}</span></div><div class="sub">${h.length} logs · last: ${h.slice(-5).map(x=>x.val).join(", ")}</div></div>`}).join(""):`<div class="card">Nothing logged yet. Log a set on the Today tab.</div>`)+
+      (names.length?`<button class="ghost" onclick="if(confirm('Clear all records?')){st.logs=[];S('logs',[]);render()}">Clear records</button>`:"");
+  }
+  if(st.tab=="food"){
+    const k=sum("kcal"),p=sum("prot");
+    a.innerHTML=`<h2>Today</h2><div class="card"><div class="row"><span>Calories</span><span style="text-align:right">${k} / ${st.goal.kcal}</span></div><div class="bar"><i style="width:${Math.min(100,k/st.goal.kcal*100)}%"></i></div>
+      <div class="row"><span>Protein</span><span style="text-align:right">${p} / ${st.goal.prot} g</span></div><div class="bar"><i style="width:${Math.min(100,p/st.goal.prot*100)}%;background:var(--ok)"></i></div></div>
+      <div class="card"><div class="row"><input id="fn" placeholder="Food"></div><div class="row" style="margin-top:8px"><input id="fk" type="number" inputmode="numeric" placeholder="kcal"><input id="fp" type="number" inputmode="numeric" placeholder="protein g"><button onclick="addFood()">Add</button></div></div>`+
+      st.food.map((f,i)=>f.d==today()?`<div class="card row"><span>${esc(f.n)}</span><span class="sub" style="text-align:right">${f.kcal} kcal · ${f.prot} g</span><button class="x" onclick="delFood(${i})">✕</button></div>`:"").join("")+
+      `<h2>Daily goals</h2><div class="card row"><input id="gk" type="number" value="${st.goal.kcal}"><input id="gp" type="number" value="${st.goal.prot}"><button onclick="setGoal()">Save</button></div><div class="sub">Left: calories, right: protein (g). Set these for your body and goals.</div>`;
+  }
+  if(st.tab=="coach"){
+    a.innerHTML=`<h2>AI coach</h2><div class="sub">Needs internet. Everything else works offline.</div>
+      <div class="chips" style="margin-top:8px">${["What should I do tomorrow?","How are my records trending?","Am I eating enough protein?","Give me a harder abs workout"].map(q=>`<button onclick="ask('${q}')">${q}</button>`).join("")}</div>
+      <div class="card row"><input id="q" placeholder="Ask anything about your training"><button style="flex:0 0 auto" onclick="ask(document.getElementById('q').value)">Ask</button></div>
+      ${st.chat?`<div class="card reply">${esc(st.chat)}</div>`:""}
+      <h2>Settings</h2><div class="card"><div class="sub">Free keys: Groq, Gemini (OpenAI-compatible URL), or OpenRouter. Your key stays on this device.</div>
+      <input id="cu" value="${esc(st.cfg.url)}" style="width:100%;margin-top:8px" placeholder="API URL"><input id="cm" value="${esc(st.cfg.model)}" style="width:100%;margin-top:8px" placeholder="Model"><input id="ck" type="password" value="${esc(st.cfg.key)}" style="width:100%;margin-top:8px" placeholder="API key"><button style="margin-top:8px" onclick="saveCfg()">Save settings</button></div>`;
+  }
+}
+addEventListener("online",render);addEventListener("offline",render);
+render();
+</script></body></html>
